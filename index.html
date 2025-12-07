@@ -221,27 +221,48 @@ function ATR(highs, lows, closes, period=14){
 }
 
 /** ---------- Yahoo Finance Fetch ---------- **/
+// fetchYahoo - use Cloudflare Worker proxy first (avoids CORS errors)
 async function fetchYahoo(symbol, range="6mo", interval="1d"){
-  // Example: https://query1.finance.yahoo.com/v8/finance/chart/AAPL?range=6mo&interval=1d&includePrePost=false
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range}&interval=${interval}&includePrePost=false`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Yahoo fetch failed ${res.status} ${res.statusText}`);
-  const json = await res.json();
-  const r = json?.chart?.result?.[0];
-  if (!r) throw new Error(`No chart data for ${symbol}`);
-  const ts = r.timestamp || [];
-  const o = r.indicators?.quote?.[0]?.open || [];
-  const h = r.indicators?.quote?.[0]?.high || [];
-  const l = r.indicators?.quote?.[0]?.low  || [];
-  const c = r.indicators?.quote?.[0]?.close|| [];
-  const v = r.indicators?.quote?.[0]?.volume|| [];
-  // map to objects
-  const data = ts.map((t,i)=> ({
-    t: new Date(t*1000),
-    open:o[i], high:h[i], low:l[i], close:c[i], volume:v[i]
-  })).filter(d=> [d.open,d.high,d.low,d.close,d.volume].every(x=> typeof x === 'number'));
-  return data;
+  // YOUR Cloudflare Worker proxy (already deployed)
+  const proxyBase = "https://tradingbot-proxy.globoist.workers.dev";
+  const proxyUrl = `${proxyBase}/chart/${encodeURIComponent(symbol)}?range=${range}&interval=${interval}`;
+
+  // try the proxy first (no CORS from browser)
+  try {
+    const res = await fetch(proxyUrl, { method: 'GET' });
+    if (!res.ok) throw new Error('Proxy fetch status ' + res.status);
+    const json = await res.json();
+    const r = json?.chart?.result?.[0];
+    if (!r) throw new Error('No chart data from proxy');
+    return r.timestamp.map((t,i)=>({
+      t: new Date(t*1000),
+      open: r.indicators.quote[0].open[i],
+      high: r.indicators.quote[0].high[i],
+      low: r.indicators.quote[0].low[i],
+      close: r.indicators.quote[0].close[i],
+      volume: r.indicators.quote[0].volume[i]
+    })).filter(d=>[d.open,d.high,d.low,d.close,d.volume].every(x=>typeof x==='number'));
+  } catch (proxyErr) {
+    console.warn('Proxy fetch failed, trying direct Yahoo as fallback -', proxyErr.message);
+
+    // fallback to direct Yahoo (may be blocked by CORS, but we try as last resort)
+    const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range}&interval=${interval}&includePrePost=false`;
+    const res2 = await fetch(yahooUrl);
+    if (!res2.ok) throw new Error('Yahoo fetch status ' + res2.status);
+    const json2 = await res2.json();
+    const r2 = json2?.chart?.result?.[0];
+    if (!r2) throw new Error('No chart data from Yahoo fallback');
+    return r2.timestamp.map((t,i)=>({
+      t: new Date(t*1000),
+      open: r2.indicators.quote[0].open[i],
+      high: r2.indicators.quote[0].high[i],
+      low: r2.indicators.quote[0].low[i],
+      close: r2.indicators.quote[0].close[i],
+      volume: r2.indicators.quote[0].volume[i]
+    })).filter(d=>[d.open,d.high,d.low,d.close,d.volume].every(x=>typeof x==='number'));
+  }
 }
+
 
 /** ---------- Signal Engine (Adaptive) ---------- **/
 function last(arr){ for(let i=arr.length-1;i>=0;i--) if(arr[i]!=null) return arr[i]; return null; }
@@ -464,3 +485,4 @@ setTimeout(run, 300);
 </script>
 </body>
 </html>
+
