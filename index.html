@@ -2,67 +2,67 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>AI Trading Bot – RSI · MACD · MA</title>
+<title>AI Trading Bot – RSI · MA (Cloudflare)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <!-- eliminate favicon.ico 404 -->
 <link rel="icon" href="data:image/x-icon;," />
 
 <style>
-  body {
-    background:#0b1220;
-    color:#e5e7eb;
-    font-family:system-ui,-apple-system,Segoe UI,Roboto;
-    margin:0;
-  }
-  header {
-    padding:14px 18px;
-    border-bottom:1px solid #1f2937;
-    background:#020617;
-  }
-  h1 { margin:0; font-size:18px }
-  .wrap { max-width:1100px; margin:auto; padding:16px }
-  .card {
-    background:#020617;
-    border:1px solid #1f2937;
-    border-radius:10px;
-    padding:14px;
-    margin-bottom:16px;
-  }
-  input,select,button {
-    width:100%;
-    padding:10px;
-    border-radius:8px;
-    border:1px solid #1f2937;
-    background:#020617;
-    color:#e5e7eb;
-  }
-  button {
-    background:#2563eb;
-    border:none;
-    cursor:pointer;
-    font-weight:600;
-  }
-  table { width:100%; border-collapse:collapse }
-  th,td { padding:8px; border-bottom:1px solid #1f2937 }
-  th { color:#93c5fd; text-align:left }
-  .buy { color:#22c55e }
-  .sell { color:#ef4444 }
-  .hold { color:#facc15 }
-  pre {
-    background:#020617;
-    border:1px solid #1f2937;
-    padding:10px;
-    border-radius:8px;
-    max-height:240px;
-    overflow:auto;
-  }
+body {
+  background:#0b1220;
+  color:#e5e7eb;
+  font-family:system-ui,-apple-system,Segoe UI,Roboto;
+  margin:0;
+}
+header {
+  padding:14px 18px;
+  border-bottom:1px solid #1f2937;
+  background:#020617;
+}
+h1 { margin:0; font-size:18px }
+.wrap { max-width:1100px; margin:auto; padding:16px }
+.card {
+  background:#020617;
+  border:1px solid #1f2937;
+  border-radius:10px;
+  padding:14px;
+  margin-bottom:16px;
+}
+input,select,button {
+  width:100%;
+  padding:10px;
+  border-radius:8px;
+  border:1px solid #1f2937;
+  background:#020617;
+  color:#e5e7eb;
+}
+button {
+  background:#2563eb;
+  border:none;
+  cursor:pointer;
+  font-weight:600;
+}
+table { width:100%; border-collapse:collapse }
+th,td { padding:8px; border-bottom:1px solid #1f2937 }
+th { color:#93c5fd; text-align:left }
+.buy { color:#22c55e }
+.sell { color:#ef4444 }
+.hold { color:#facc15 }
+pre {
+  background:#020617;
+  border:1px solid #1f2937;
+  padding:10px;
+  border-radius:8px;
+  max-height:220px;
+  overflow:auto;
+}
 </style>
 </head>
 
 <body>
 <header>
-  <h1>AI Trading Bot – RSI · MACD · MA (Cloudflare Proxy)</h1>
+  <h1>AI Trading Bot – RSI · MA (Cloudflare Proxy)</h1>
 </header>
 
 <div class="wrap">
@@ -124,19 +124,19 @@ const log = msg => {
 };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-/* ================= FETCH VIA PROXY ================= */
+/* ================= FETCH ================= */
 async function fetchYahoo(symbol, range, interval){
   const url = `${PROXY_BASE}/chart/${encodeURIComponent(symbol)}?range=${range}&interval=${interval}`;
   const res = await fetch(url);
-  if(!res.ok) throw new Error(`Proxy ${res.status}`);
   const json = await res.json();
-  const r = json?.chart?.result?.[0];
-  if(!r) throw new Error("No chart data");
-  return r.indicators.quote[0].close
+  if (!json?.chart?.result?.[0]) {
+    throw new Error(json?.error || "No data");
+  }
+  return json.chart.result[0].indicators.quote[0].close
     .map((c,i)=>({
       close:c,
-      high:r.indicators.quote[0].high[i],
-      low:r.indicators.quote[0].low[i]
+      high:json.chart.result[0].indicators.quote[0].high[i],
+      low:json.chart.result[0].indicators.quote[0].low[i]
     }))
     .filter(x=>x.close!=null);
 }
@@ -161,7 +161,7 @@ function RSI(v,p=14){
 
 /* ================= MAIN ================= */
 async function run(){
-  const tickers = document.getElementById("tickers").value.split(",").map(t=>t.trim());
+  const tickers = document.getElementById("tickers").value.split(",").map(t=>t.trim()).filter(Boolean);
   const range = document.getElementById("range").value;
   const interval = document.getElementById("interval").value;
   const tbody = document.getElementById("results");
@@ -170,7 +170,7 @@ async function run(){
 
   for(const [i,t] of tickers.entries()){
     try{
-      if(i>0) await sleep(250); // throttle
+      if(i>0) await sleep(300); // throttle
       log(`Fetching ${t}`);
       const data = await fetchYahoo(t,range,interval);
       const closes = data.map(d=>d.close);
@@ -192,6 +192,14 @@ async function run(){
         </tr>`;
     }catch(e){
       log(`[${t}] ${e.message}`);
+      tbody.innerHTML += `
+        <tr>
+          <td>${t}</td>
+          <td class="hold">WAIT</td>
+          <td>—</td>
+          <td>—</td>
+          <td>Rate limited</td>
+        </tr>`;
     }
   }
   log("Done.");
