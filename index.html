@@ -1,488 +1,201 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <title>AI Trading Bot – Adaptive (RSI + MACD + MAs)</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <style>
-    :root{ --bg:#0b0f1a; --card:#121829; --muted:#8fa1c1; --text:#e8eeff; --good:#2dd4bf; --bad:#fb7185; --warn:#fbbf24; --accent:#60a5fa; }
-    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 system-ui,Segoe UI,Roboto}
-    header{padding:18px 22px;border-bottom:1px solid #1d2438;background:linear-gradient(180deg,#0b0f1a,#0b0f1a 60%,#0d1424)}
-    h1{margin:0;font-size:18px;letter-spacing:.2px}
-    .wrap{max-width:1100px;margin:22px auto;padding:0 16px}
-    .card{background:var(--card);border:1px solid #1d2438;border-radius:12px;padding:16px;margin-bottom:18px}
-    .row{display:flex;gap:12px;flex-wrap:wrap}
-    .row > *{flex:1 1 220px}
-    label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}
-    input,select,button,textarea{
-      width:100%;background:#0d1424;border:1px solid #223053;color:var(--text);
-      padding:10px 12px;border-radius:10px;outline:none
-    }
-    button{cursor:pointer;background:linear-gradient(180deg,#1b2742,#16203b);border-color:#29416e}
-    button.primary{background:linear-gradient(180deg,#2563eb,#1e40af);border-color:#1d4ed8}
-    button:disabled{opacity:.5;cursor:not-allowed}
-    .chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
-    .chip{background:#0d1424;border:1px solid #223053;color:var(--muted);padding:6px 10px;border-radius:999px;font-size:12px}
-    table{width:100%;border-collapse:separate;border-spacing:0 8px}
-    th,td{padding:10px 12px;text-align:left}
-    th{color:var(--muted);font-weight:600}
-    tr{background:#0d1424;border:1px solid #223053}
-    tr td{border-top:1px solid #223053;border-bottom:1px solid #223053}
-    tr td:first-child{border-left:1px solid #223053;border-radius:10px 0 0 10px}
-    tr td:last-child{border-right:1px solid #223053;border-radius:0 10px 10px 0}
-    .pill{padding:4px 8px;border-radius:999px;font-size:12px;display:inline-block}
-    .buy{background:rgba(45,212,191,.15);color:var(--good);border:1px solid rgba(45,212,191,.35)}
-    .sell{background:rgba(251,113,133,.15);color:var(--bad);border:1px solid rgba(251,113,133,.35)}
-    .hold{background:rgba(96,165,250,.15);color:var(--accent);border:1px solid rgba(96,165,250,.35)}
-    .muted{color:var(--muted)}
-    .grid{display:grid;grid-template-columns:1.25fr .75fr;gap:16px}
-    @media (max-width:980px){.grid{grid-template-columns:1fr}}
-    pre{white-space:pre-wrap;background:#0d1424;border:1px solid #223053;padding:10px;border-radius:10px;color:#c7d7ff;max-height:260px;overflow:auto}
-  </style>
+<meta charset="UTF-8" />
+<title>AI Trading Bot – RSI · MACD · MA</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<!-- eliminate favicon.ico 404 -->
+<link rel="icon" href="data:image/x-icon;," />
+
+<style>
+  body {
+    background:#0b1220;
+    color:#e5e7eb;
+    font-family:system-ui,-apple-system,Segoe UI,Roboto;
+    margin:0;
+  }
+  header {
+    padding:14px 18px;
+    border-bottom:1px solid #1f2937;
+    background:#020617;
+  }
+  h1 { margin:0; font-size:18px }
+  .wrap { max-width:1100px; margin:auto; padding:16px }
+  .card {
+    background:#020617;
+    border:1px solid #1f2937;
+    border-radius:10px;
+    padding:14px;
+    margin-bottom:16px;
+  }
+  input,select,button {
+    width:100%;
+    padding:10px;
+    border-radius:8px;
+    border:1px solid #1f2937;
+    background:#020617;
+    color:#e5e7eb;
+  }
+  button {
+    background:#2563eb;
+    border:none;
+    cursor:pointer;
+    font-weight:600;
+  }
+  table { width:100%; border-collapse:collapse }
+  th,td { padding:8px; border-bottom:1px solid #1f2937 }
+  th { color:#93c5fd; text-align:left }
+  .buy { color:#22c55e }
+  .sell { color:#ef4444 }
+  .hold { color:#facc15 }
+  pre {
+    background:#020617;
+    border:1px solid #1f2937;
+    padding:10px;
+    border-radius:8px;
+    max-height:240px;
+    overflow:auto;
+  }
+</style>
 </head>
+
 <body>
-  <header><h1>AI Trading Bot – RSI + MACD + MAs (Adaptive Risk)</h1></header>
-  <div class="wrap">
-    <div class="card">
-      <div class="row">
-        <div>
-          <label>Tickers (comma separated)</label>
-          <input id="tickers" value="AAPL,MSFT,TSLA,NVDA" />
-          <div class="chips">
-            <span class="chip">IDX examples: TLKM.JK, BBCA.JK, BBNI.JK</span>
-          </div>
-        </div>
-        <div>
-          <label>Range</label>
-          <select id="range">
-            <option value="3mo">3 months</option>
-            <option value="6mo" selected>6 months</option>
-            <option value="1y">1 year</option>
-            <option value="2y">2 years</option>
-          </select>
-        </div>
-        <div>
-          <label>Interval</label>
-          <select id="interval">
-            <option value="1d" selected>1 day</option>
-            <option value="1h">1 hour</option>
-            <option value="30m">30 min</option>
-            <option value="15m">15 min</option>
-          </select>
-        </div>
-        <div>
-          <label>Account Equity (for position sizing)</label>
-          <input id="equity" type="number" value="10000" />
-        </div>
-        <div>
-          <label>Max Risk per Trade (% of equity)</label>
-          <input id="riskPct" type="number" step="0.1" value="1.0" />
-        </div>
-      </div>
-      <div class="row">
-        <div>
-          <label>News (Yahoo RSS)</label>
-          <select id="newsOn">
-            <option value="on" selected>On</option>
-            <option value="off">Off</option>
-          </select>
-        </div>
-        <div>
-          <label>Minimum Volume Filter (SMA20)</label>
-          <select id="volFilter">
-            <option value="on" selected>On</option>
-            <option value="off">Off</option>
-          </select>
-        </div>
-        <div>
-          <label>Run</label>
-          <button id="run" class="primary">Scan & Generate Signals</button>
-        </div>
-      </div>
-    </div>
+<header>
+  <h1>AI Trading Bot – RSI · MACD · MA (Cloudflare Proxy)</h1>
+</header>
 
-    <div class="grid">
-      <div class="card">
-        <h3 style="margin-top:0">Signals</h3>
-        <table id="signals">
-          <thead>
-            <tr>
-              <th>Ticker</th><th>Signal</th><th>Last</th><th>RSI(14)</th><th>MACD(12,26,9)</th>
-              <th>Trend</th><th>Stop</th><th>TP1 / TP2</th><th>Size</th><th class="muted">Notes</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-        <p class="muted">Logic: RSI + MACD histogram cross + MA trend + volume confirm; risk based on ATR(14). Trailing stop auto-suggested.</p>
-      </div>
+<div class="wrap">
 
-      <div class="card">
-        <h3 style="margin-top:0">News (Latest 5)</h3>
-        <div id="news"></div>
-      </div>
-    </div>
+<div class="card">
+  <label>Tickers (comma separated)</label>
+  <input id="tickers" value="AAPL,MSFT,TSLA" />
+  <br><br>
 
-    <div class="card">
-      <h3 style="margin-top:0">Diagnostics</h3>
-      <pre id="log"></pre>
-    </div>
-  </div>
+  <label>Range</label>
+  <select id="range">
+    <option value="3mo">3 months</option>
+    <option value="6mo" selected>6 months</option>
+    <option value="1y">1 year</option>
+  </select>
+  <br><br>
+
+  <label>Interval</label>
+  <select id="interval">
+    <option value="1d" selected>1 day</option>
+    <option value="1h">1 hour</option>
+  </select>
+  <br><br>
+
+  <button onclick="run()">Scan & Generate Signals</button>
+</div>
+
+<div class="card">
+  <table>
+    <thead>
+      <tr>
+        <th>Ticker</th>
+        <th>Signal</th>
+        <th>Price</th>
+        <th>RSI</th>
+        <th>Trend</th>
+      </tr>
+    </thead>
+    <tbody id="results"></tbody>
+  </table>
+</div>
+
+<div class="card">
+  <h3>Diagnostics</h3>
+  <pre id="log"></pre>
+</div>
+
+</div>
 
 <script>
-/** ---------- Math & Indicators ---------- **/
-function SMA(values, period){
-  const out = Array(values.length).fill(null);
-  let sum = 0;
-  for (let i=0;i<values.length;i++){
-    const v = values[i];
-    sum += v;
-    if (i >= period) sum -= values[i-period];
-    if (i >= period-1) out[i] = sum/period;
-  }
-  return out;
-}
+/* ================= CONFIG ================= */
+const PROXY_BASE = "https://tradingbot-proxy.globoist.workers.dev";
 
-function EMA(values, period){
-  const k = 2/(period+1);
-  const out = Array(values.length).fill(null);
-  let ema = null;
-  for (let i=0;i<values.length;i++){
-    const v = values[i];
-    if (v==null) { out[i]=null; continue; }
-    if (ema==null){
-      // seed with SMA
-      const start = Math.max(0, i-period+1);
-      const slice = values.slice(start,i+1).filter(x=>x!=null);
-      if (slice.length < period){ out[i]=null; continue; }
-      ema = slice.reduce((a,b)=>a+b,0)/slice.length;
-    } else {
-      ema = v*k + ema*(1-k);
-    }
-    out[i]=ema;
-  }
-  return out;
-}
+/* ================= UTIL ================= */
+const log = msg => {
+  const el = document.getElementById("log");
+  el.textContent += msg + "\n";
+  el.scrollTop = el.scrollHeight;
+};
+const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-function RSI_Wilder(closes, period=14){
-  const out = Array(closes.length).fill(null);
-  let avgGain = 0, avgLoss = 0;
-  let initialized = false;
-  for (let i=1;i<closes.length;i++){
-    const change = closes[i]-closes[i-1];
-    const gain = Math.max(0, change);
-    const loss = Math.max(0, -change);
-    if (i <= period){
-      avgGain += gain; avgLoss += loss;
-      if (i === period){
-        avgGain /= period;
-        avgLoss /= period;
-        initialized = true;
-        const rs = (avgLoss===0) ? 100 : avgGain/avgLoss;
-        out[i] = 100 - 100/(1+rs);
-      }
-    } else {
-      avgGain = (avgGain*(period-1) + gain)/period;
-      avgLoss = (avgLoss*(period-1) + loss)/period;
-      const rs = (avgLoss===0) ? 100 : avgGain/avgLoss;
-      out[i] = 100 - 100/(1+rs);
-    }
-  }
-  return out;
-}
-
-function MACD(values, fast=12, slow=26, signal=9){
-  const emaFast = EMA(values, fast);
-  const emaSlow = EMA(values, slow);
-  const macd = values.map((_,i)=> (emaFast[i]!=null && emaSlow[i]!=null) ? (emaFast[i]-emaSlow[i]) : null);
-  const signalLine = EMA(macd, signal);
-  const hist = macd.map((v,i)=> (v!=null && signalLine[i]!=null) ? (v - signalLine[i]) : null);
-  return {macd, signal: signalLine, hist};
-}
-
-function TrueRange(h,l,cPrev){
-  return Math.max(h-l, Math.abs(h-cPrev), Math.abs(l-cPrev));
-}
-
-function ATR(highs, lows, closes, period=14){
-  const out = Array(closes.length).fill(null);
-  let atr = 0;
-  for (let i=0;i<closes.length;i++){
-    if (i===0) { out[i]=null; continue; }
-    const tr = TrueRange(highs[i], lows[i], closes[i-1]);
-    if (i<=period){
-      atr += tr;
-      if (i===period) { atr /= period; out[i]=atr; }
-    } else {
-      atr = (atr*(period-1) + tr)/period;
-      out[i]=atr;
-    }
-  }
-  return out;
-}
-
-/** ---------- Yahoo Finance Fetch ---------- **/
-// fetchYahoo - use Cloudflare Worker proxy first (avoids CORS errors)
-async function fetchYahoo(symbol, range="6mo", interval="1d"){
-  // YOUR Cloudflare Worker proxy (already deployed)
-  const proxyBase = "https://tradingbot-proxy.globoist.workers.dev";
-  const proxyUrl = `${proxyBase}/chart/${encodeURIComponent(symbol)}?range=${range}&interval=${interval}`;
-
-  // try the proxy first (no CORS from browser)
-  try {
-    const res = await fetch(proxyUrl, { method: 'GET' });
-    if (!res.ok) throw new Error('Proxy fetch status ' + res.status);
-    const json = await res.json();
-    const r = json?.chart?.result?.[0];
-    if (!r) throw new Error('No chart data from proxy');
-    return r.timestamp.map((t,i)=>({
-      t: new Date(t*1000),
-      open: r.indicators.quote[0].open[i],
-      high: r.indicators.quote[0].high[i],
-      low: r.indicators.quote[0].low[i],
-      close: r.indicators.quote[0].close[i],
-      volume: r.indicators.quote[0].volume[i]
-    })).filter(d=>[d.open,d.high,d.low,d.close,d.volume].every(x=>typeof x==='number'));
-  } catch (proxyErr) {
-    console.warn('Proxy fetch failed, trying direct Yahoo as fallback -', proxyErr.message);
-
-    // fallback to direct Yahoo (may be blocked by CORS, but we try as last resort)
-    const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range}&interval=${interval}&includePrePost=false`;
-    const res2 = await fetch(yahooUrl);
-    if (!res2.ok) throw new Error('Yahoo fetch status ' + res2.status);
-    const json2 = await res2.json();
-    const r2 = json2?.chart?.result?.[0];
-    if (!r2) throw new Error('No chart data from Yahoo fallback');
-    return r2.timestamp.map((t,i)=>({
-      t: new Date(t*1000),
-      open: r2.indicators.quote[0].open[i],
-      high: r2.indicators.quote[0].high[i],
-      low: r2.indicators.quote[0].low[i],
-      close: r2.indicators.quote[0].close[i],
-      volume: r2.indicators.quote[0].volume[i]
-    })).filter(d=>[d.open,d.high,d.low,d.close,d.volume].every(x=>typeof x==='number'));
-  }
-}
-
-
-/** ---------- Signal Engine (Adaptive) ---------- **/
-function last(arr){ for(let i=arr.length-1;i>=0;i--) if(arr[i]!=null) return arr[i]; return null; }
-
-function generateSignalForSeries(series, equity=10000, riskPct=1.0, withVolFilter=true){
-  const closes = series.map(d=>d.close);
-  const highs  = series.map(d=>d.high);
-  const lows   = series.map(d=>d.low);
-  const vols   = series.map(d=>d.volume);
-
-  const ema20 = EMA(closes,20);
-  const ema50 = EMA(closes,50);
-  const sma200= SMA(closes,200);
-  const rsi14 = RSI_Wilder(closes,14);
-  const {macd, signal, hist} = MACD(closes,12,26,9);
-  const atr14 = ATR(highs, lows, closes,14);
-  const volSMA20 = SMA(vols,20);
-
-  const i = closes.length-1;
-  const px = closes[i];
-  const rsi = rsi14[i];
-  const h0 = hist[i], h1 = hist[i-1];
-  const histCrossUp   = (h1!=null && h0!=null) && (h1<=0 && h0>0);
-  const histCrossDown = (h1!=null && h0!=null) && (h1>=0 && h0<0);
-  const trendUp = (ema50[i]!=null && px>ema50[i]) || (sma200[i]!=null && px>sma200[i]);
-  const trendDown = (ema50[i]!=null && px<ema50[i]) || (sma200[i]!=null && px<sma200[i]);
-  const volOk = withVolFilter ? (volSMA20[i]!=null && vols[i] >= volSMA20[i]) : true;
-
-  const atr = atr14[i];
-  const riskAmt = equity * (riskPct/100);
-  const stopDistance = atr ? 1.5*atr : px*0.02; // fallback 2%
-  const size = Math.max(0, Math.floor(riskAmt / stopDistance)); // units (shares)
-
-  // Targets based on R multiples
-  const entry = px;
-  const stopLong = entry - stopDistance;
-  const tp1Long  = entry + stopDistance*1.5; // 1.5R
-  const tp2Long  = entry + stopDistance*3.0; // 3R
-
-  const stopShort = entry + stopDistance;
-  const tp1Short  = entry - stopDistance*1.5;
-  const tp2Short  = entry - stopDistance*3.0;
-
-  let signalLabel = "HOLD", badge="hold", notes=[];
-  let stop=null, tp1=null, tp2=null, trailing=null;
-
-  // --- Longs ---
-  if (rsi!=null && histCrossUp && trendUp && volOk && rsi < 35){
-    signalLabel = "STRONG BUY"; badge="buy";
-    stop = round2(stopLong); tp1=round2(tp1Long); tp2=round2(tp2Long);
-    trailing = atr ? `Use ATR trail: ${round2(1.5*atr)}` : "Use 2% trail";
-    notes.push("RSI oversold + MACD hist cross↑ + Uptrend + Vol confirm");
-  } else if (rsi!=null && hist[i]>0 && trendUp && volOk && rsi < 45){
-    signalLabel = "BUY"; badge="buy";
-    stop = round2(stopLong); tp1=round2(tp1Long); tp2=round2(tp2Long);
-    trailing = atr ? `ATR trail ${round2(1.5*atr)}` : "2% trail";
-    notes.push("Momentum continuation (MACD>signal, trend up)");
-  }
-
-  // --- Shorts / Sells (optional) ---
-  if (signalLabel==="HOLD"){
-    if (rsi!=null && histCrossDown && trendDown && volOk && rsi > 65){
-      signalLabel = "STRONG SELL"; badge="sell";
-      stop = round2(stopShort); tp1=round2(tp1Short); tp2=round2(tp2Short);
-      trailing = atr ? `Use ATR trail: ${round2(1.5*atr)}` : "Use 2% trail";
-      notes.push("RSI overbought + MACD hist cross↓ + Downtrend + Vol confirm");
-    } else if (rsi!=null && hist[i]<0 && trendDown && volOk && rsi > 55){
-      signalLabel = "SELL"; badge="sell";
-      stop = round2(stopShort); tp1=round2(tp1Short); tp2=round2(tp2Short);
-      trailing = atr ? `ATR trail ${round2(1.5*atr)}` : "2% trail";
-      notes.push("Momentum continuation down");
-    }
-  }
-
-  // Quick in-and-out guard: if ATR% is tiny, use tighter TP1
-  if (signalLabel.endsWith("BUY") && atr){
-    const atrPct = atr/px;
-    if (atrPct < 0.01){ // <1% daily ATR
-      tp1 = round2(entry + stopDistance); // 1R
-      notes.push("Low volatility: TP1 tightened to 1R");
-    }
-  }
-
-  // Return snapshot
-  return {
-    last: round2(px),
-    rsi: rsi ? round1(rsi) : null,
-    macd: (macd[i]!=null && signal[i]!=null) ? `${round2(macd[i])}/${round2(signal[i])}` : null,
-    trend: trendUp ? "Up" : trendDown ? "Down" : "Sideways",
-    signal: signalLabel,
-    badge, stop, tp1, tp2,
-    trailing, size,
-    diagnostics: { rsi: rsi, hist0:h0, hist1:h1, ema50: ema50[i], sma200: sma200[i], atr, volOk }
-  };
-}
-
-function round2(x){ return x!=null ? Math.round(x*100)/100 : x; }
-function round1(x){ return x!=null ? Math.round(x*10)/10 : x; }
-
-/** ---------- News (Yahoo RSS) ---------- **/
-async function fetchYahooNews(ticker, maxItems=5){
-  // RSS endpoint (no key). Some browsers may enforce CORS; we handle errors gracefully.
-  const url = `https://feeds.finance.yahoo.com/rss/2.0/headline?s=${encodeURIComponent(ticker)}&region=US&lang=en-US`;
+/* ================= FETCH VIA PROXY ================= */
+async function fetchYahoo(symbol, range, interval){
+  const url = `${PROXY_BASE}/chart/${encodeURIComponent(symbol)}?range=${range}&interval=${interval}`;
   const res = await fetch(url);
-  if(!res.ok) throw new Error(`News fetch failed ${res.status}`);
-  const text = await res.text();
-  const parser = new DOMParser();
-  const xml = parser.parseFromString(text, "text/xml");
-  const items = Array.from(xml.querySelectorAll("item")).slice(0,maxItems).map(it=>({
-    title: it.querySelector("title")?.textContent ?? "",
-    link: it.querySelector("link")?.textContent ?? "",
-    date: it.querySelector("pubDate")?.textContent ?? ""
-  }));
-  return items;
+  if(!res.ok) throw new Error(`Proxy ${res.status}`);
+  const json = await res.json();
+  const r = json?.chart?.result?.[0];
+  if(!r) throw new Error("No chart data");
+  return r.indicators.quote[0].close
+    .map((c,i)=>({
+      close:c,
+      high:r.indicators.quote[0].high[i],
+      low:r.indicators.quote[0].low[i]
+    }))
+    .filter(x=>x.close!=null);
 }
 
-/** ---------- UI Wiring ---------- **/
-const $ = s => document.querySelector(s);
-const log = (msg) => { const el=$("#log"); el.textContent += msg + "\n"; el.scrollTop = el.scrollHeight; };
+/* ================= INDICATORS ================= */
+function SMA(v,p){
+  return v.map((_,i)=> i<p-1?null:v.slice(i-p+1,i+1).reduce((a,b)=>a+b)/p);
+}
+function RSI(v,p=14){
+  let g=0,l=0,out=[];
+  for(let i=1;i<v.length;i++){
+    let d=v[i]-v[i-1];
+    g+=Math.max(0,d); l+=Math.max(0,-d);
+    if(i<p){ out.push(null); continue; }
+    if(i===p){ g/=p; l/=p; }
+    else { g=(g*(p-1)+Math.max(0,d))/p; l=(l*(p-1)+Math.max(0,-d))/p; }
+    out.push(100-100/(1+g/l));
+  }
+  out.unshift(null);
+  return out;
+}
 
+/* ================= MAIN ================= */
 async function run(){
-  $("#run").disabled = true; $("#signals tbody").innerHTML = ""; $("#news").innerHTML = ""; $("#log").textContent="";
-  const tickers = $("#tickers").value.split(",").map(s=>s.trim()).filter(Boolean);
-  const range = $("#range").value;
-  const interval = $("#interval").value;
-  const equity = parseFloat($("#equity").value||"10000");
-  const riskPct = parseFloat($("#riskPct").value||"1.0");
-  const volFilter = $("#volFilter").value === "on";
-  const showNews = $("#newsOn").value === "on";
+  const tickers = document.getElementById("tickers").value.split(",").map(t=>t.trim());
+  const range = document.getElementById("range").value;
+  const interval = document.getElementById("interval").value;
+  const tbody = document.getElementById("results");
+  tbody.innerHTML = "";
+  log("Starting scan...");
 
-  for (const t of tickers){
+  for(const [i,t] of tickers.entries()){
     try{
-      log(`Fetching ${t} ${range}/${interval} ...`);
-      const data = await fetchYahoo(t, range, interval);
-      if (data.length < 60) throw new Error("Insufficient candles for indicators");
+      if(i>0) await sleep(250); // throttle
+      log(`Fetching ${t}`);
+      const data = await fetchYahoo(t,range,interval);
+      const closes = data.map(d=>d.close);
+      const rsi = RSI(closes).pop();
+      const ma50 = SMA(closes,50).pop();
+      const last = closes.at(-1);
 
-      const sig = generateSignalForSeries(data, equity, riskPct, volFilter);
-      addSignalRow(t, sig);
+      let signal="HOLD",cls="hold";
+      if(rsi<35 && last>ma50){ signal="BUY"; cls="buy"; }
+      else if(rsi>65 && last<ma50){ signal="SELL"; cls="sell"; }
 
-      if (showNews){
-        try{
-          const items = await fetchYahooNews(t, 5);
-          appendNewsBlock(t, items);
-        } catch(e){
-          appendNewsBlock(t, [], `News unavailable for ${t} (CORS or feed).`);
-        }
-      }
-    } catch(e){
-      log(`[${t}] Error: ${e.message}`);
-      addErrorRow(t, e.message);
+      tbody.innerHTML += `
+        <tr>
+          <td>${t}</td>
+          <td class="${cls}">${signal}</td>
+          <td>${last.toFixed(2)}</td>
+          <td>${rsi?.toFixed(1)}</td>
+          <td>${last>ma50?"Up":"Down"}</td>
+        </tr>`;
+    }catch(e){
+      log(`[${t}] ${e.message}`);
     }
   }
-  $("#run").disabled = false;
+  log("Done.");
 }
-
-function addSignalRow(ticker, sig){
-  const tbody = $("#signals tbody");
-  const tr = document.createElement("tr");
-  const pill = `<span class="pill ${sig.badge}">${sig.signal}</span>`;
-  const note = sig.trailing ? `• ${sig.trailing}` : "";
-  tr.innerHTML = `
-    <td><b>${ticker}</b></td>
-    <td>${pill}</td>
-    <td>${sig.last ?? "-"}</td>
-    <td>${sig.rsi ?? "-"}</td>
-    <td>${sig.macd ?? "-"}</td>
-    <td>${sig.trend}</td>
-    <td>${sig.stop ?? "-"}</td>
-    <td>${(sig.tp1??"-")} / ${(sig.tp2??"-")}</td>
-    <td>${sig.size}</td>
-    <td class="muted">${note}</td>
-  `;
-  tbody.appendChild(tr);
-}
-
-function addErrorRow(ticker, msg){
-  const tbody = $("#signals tbody");
-  const tr = document.createElement("tr");
-  tr.innerHTML = `
-    <td><b>${ticker}</b></td>
-    <td><span class="pill hold">ERROR</span></td>
-    <td colspan="8" class="muted">${msg}</td>
-  `;
-  tbody.appendChild(tr);
-}
-
-function appendNewsBlock(ticker, items, fallbackMsg){
-  const wrap = document.createElement("div");
-  wrap.style.marginBottom="14px";
-  const title = document.createElement("div");
-  title.innerHTML = `<b>${ticker}</b>`;
-  wrap.appendChild(title);
-  if (items.length===0){
-    const p = document.createElement("div");
-    p.className="muted"; p.textContent = fallbackMsg || "No recent news found.";
-    wrap.appendChild(p);
-  } else {
-    const ul = document.createElement("ul");
-    ul.style.paddingLeft="16px";
-    items.forEach(it=>{
-      const li = document.createElement("li");
-      const a = document.createElement("a");
-      a.href = it.link; a.target="_blank"; a.rel="noreferrer noopener";
-      a.textContent = it.title;
-      li.appendChild(a);
-      const small = document.createElement("div");
-      small.className="muted"; small.style.fontSize="12px"; small.textContent = it.date;
-      li.appendChild(small);
-      ul.appendChild(li);
-    });
-    wrap.appendChild(ul);
-  }
-  $("#news").appendChild(wrap);
-}
-
-$("#run").addEventListener("click", run);
-
-// Auto-run once on load for convenience
-setTimeout(run, 300);
 </script>
 </body>
 </html>
-
