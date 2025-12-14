@@ -2,207 +2,133 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>AI Trading Bot – RSI · MA (Cloudflare)</title>
+<title>AI Trading Bot – Advanced Signals</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-<!-- eliminate favicon.ico 404 -->
 <link rel="icon" href="data:image/x-icon;," />
 
 <style>
-body {
-  background:#0b1220;
-  color:#e5e7eb;
-  font-family:system-ui,-apple-system,Segoe UI,Roboto;
-  margin:0;
-}
-header {
-  padding:14px 18px;
-  border-bottom:1px solid #1f2937;
-  background:#020617;
-}
-h1 { margin:0; font-size:18px }
-.wrap { max-width:1100px; margin:auto; padding:16px }
-.card {
-  background:#020617;
-  border:1px solid #1f2937;
-  border-radius:10px;
-  padding:14px;
-  margin-bottom:16px;
-}
-input,select,button {
-  width:100%;
-  padding:10px;
-  border-radius:8px;
-  border:1px solid #1f2937;
-  background:#020617;
-  color:#e5e7eb;
-}
-button {
-  background:#2563eb;
-  border:none;
-  cursor:pointer;
-  font-weight:600;
-}
+body { background:#0b1220; color:#e5e7eb; font-family:system-ui; margin:0 }
+header { padding:14px; background:#020617; border-bottom:1px solid #1f2937 }
+.wrap { max-width:1200px; margin:auto; padding:16px }
+.card { background:#020617; border:1px solid #1f2937; border-radius:10px; padding:14px; margin-bottom:16px }
+input,select,button { width:100%; padding:10px; border-radius:8px; background:#020617; color:#e5e7eb; border:1px solid #1f2937 }
+button { background:#2563eb; border:none; font-weight:600; cursor:pointer }
 table { width:100%; border-collapse:collapse }
-th,td { padding:8px; border-bottom:1px solid #1f2937 }
-th { color:#93c5fd; text-align:left }
+th,td { padding:8px; border-bottom:1px solid #1f2937; text-align:left }
 .buy { color:#22c55e }
 .sell { color:#ef4444 }
 .hold { color:#facc15 }
-pre {
-  background:#020617;
-  border:1px solid #1f2937;
-  padding:10px;
-  border-radius:8px;
-  max-height:220px;
-  overflow:auto;
-}
 </style>
 </head>
 
 <body>
-<header>
-  <h1>AI Trading Bot – RSI · MA (Cloudflare Proxy)</h1>
-</header>
+<header><h2>AI Trading Bot – Entry · Exit · SL · TP · MACD</h2></header>
 
 <div class="wrap">
 
 <div class="card">
-  <label>Tickers (comma separated)</label>
-  <input id="tickers" value="AAPL,MSFT,TSLA" />
-  <br><br>
-
-  <label>Range</label>
-  <select id="range">
-    <option value="3mo">3 months</option>
-    <option value="6mo" selected>6 months</option>
-    <option value="1y">1 year</option>
-  </select>
-  <br><br>
-
-  <label>Interval</label>
-  <select id="interval">
-    <option value="1d" selected>1 day</option>
-    <option value="1h">1 hour</option>
-  </select>
-  <br><br>
-
-  <button onclick="run()">Scan & Generate Signals</button>
+<label>Tickers</label>
+<input id="tickers" value="AAPL" /><br><br>
+<label>Interval</label>
+<select id="interval">
+<option value="1d">1 Day</option>
+<option value="1h">1 Hour</option>
+</select><br><br>
+<button onclick="run()">Scan Signals</button>
 </div>
 
 <div class="card">
-  <table>
-    <thead>
-      <tr>
-        <th>Ticker</th>
-        <th>Signal</th>
-        <th>Price</th>
-        <th>RSI</th>
-        <th>Trend</th>
-      </tr>
-    </thead>
-    <tbody id="results"></tbody>
-  </table>
-</div>
-
-<div class="card">
-  <h3>Diagnostics</h3>
-  <pre id="log"></pre>
+<table>
+<thead>
+<tr>
+<th>Ticker</th>
+<th>Signal</th>
+<th>Entry</th>
+<th>Stop Loss</th>
+<th>Take Profit</th>
+<th>RSI</th>
+<th>MACD</th>
+<th>Confidence</th>
+</tr>
+</thead>
+<tbody id="results"></tbody>
+</table>
 </div>
 
 </div>
 
 <script>
-/* ================= CONFIG ================= */
-const PROXY_BASE = "https://tradingbot-proxy.globoist.workers.dev";
+const PROXY = "https://tradingbot-proxy.globoist.workers.dev";
 
-/* ================= UTIL ================= */
-const log = msg => {
-  const el = document.getElementById("log");
-  el.textContent += msg + "\n";
-  el.scrollTop = el.scrollHeight;
-};
-const sleep = ms => new Promise(r => setTimeout(r, ms));
+const sleep = ms => new Promise(r=>setTimeout(r,ms));
 
-/* ================= FETCH ================= */
-async function fetchYahoo(symbol, range, interval){
-  const url = `${PROXY_BASE}/chart/${encodeURIComponent(symbol)}?range=${range}&interval=${interval}`;
-  const res = await fetch(url);
-  const json = await res.json();
-  if (!json?.chart?.result?.[0]) {
-    throw new Error(json?.error || "No data");
-  }
-  return json.chart.result[0].indicators.quote[0].close
-    .map((c,i)=>({
-      close:c,
-      high:json.chart.result[0].indicators.quote[0].high[i],
-      low:json.chart.result[0].indicators.quote[0].low[i]
-    }))
-    .filter(x=>x.close!=null);
+async function fetchData(symbol, interval){
+  const r = await fetch(`${PROXY}/chart/${symbol}?interval=${interval}`);
+  const j = await r.json();
+  return j.chart.result[0].indicators.quote[0].close;
 }
 
-/* ================= INDICATORS ================= */
-function SMA(v,p){
-  return v.map((_,i)=> i<p-1?null:v.slice(i-p+1,i+1).reduce((a,b)=>a+b)/p);
-}
+// ===== Indicators =====
+function SMA(v,p){ return v.map((_,i)=> i<p-1?null:v.slice(i-p+1,i+1).reduce((a,b)=>a+b)/p); }
+
 function RSI(v,p=14){
-  let g=0,l=0,out=[];
+  let g=0,l=0,r=[];
   for(let i=1;i<v.length;i++){
     let d=v[i]-v[i-1];
-    g+=Math.max(0,d); l+=Math.max(0,-d);
-    if(i<p){ out.push(null); continue; }
+    g+=Math.max(d,0); l+=Math.max(-d,0);
+    if(i<p){ r.push(null); continue; }
     if(i===p){ g/=p; l/=p; }
-    else { g=(g*(p-1)+Math.max(0,d))/p; l=(l*(p-1)+Math.max(0,-d))/p; }
-    out.push(100-100/(1+g/l));
+    else{ g=(g*(p-1)+Math.max(d,0))/p; l=(l*(p-1)+Math.max(-d,0))/p; }
+    r.push(100-100/(1+g/l));
   }
-  out.unshift(null);
-  return out;
+  r.unshift(null); return r;
 }
 
-/* ================= MAIN ================= */
+function EMA(v,p){
+  const k=2/(p+1); let e=v[0]; return v.map(x=> e=e+k*(x-e));
+}
+
+function MACD(v){
+  const macd = EMA(v,12).map((x,i)=>x-EMA(v,26)[i]);
+  const signal = EMA(macd,9);
+  return macd[macd.length-1]-signal[signal.length-1];
+}
+
+// ===== Main =====
 async function run(){
-  const tickers = document.getElementById("tickers").value.split(",").map(t=>t.trim()).filter(Boolean);
-  const range = document.getElementById("range").value;
+  const tb = document.getElementById("results");
+  tb.innerHTML="";
+  const tickers = document.getElementById("tickers").value.split(",").map(x=>x.trim());
   const interval = document.getElementById("interval").value;
-  const tbody = document.getElementById("results");
-  tbody.innerHTML = "";
-  log("Starting scan...");
 
   for(const [i,t] of tickers.entries()){
-    try{
-      if(i>0) await sleep(300); // throttle
-      log(`Fetching ${t}`);
-      const data = await fetchYahoo(t,range,interval);
-      const closes = data.map(d=>d.close);
-      const rsi = RSI(closes).pop();
-      const ma50 = SMA(closes,50).pop();
-      const last = closes.at(-1);
+    if(i>0) await sleep(300);
+    const closes = await fetchData(t,interval);
+    const last = closes.at(-1);
+    const rsi = RSI(closes).at(-1);
+    const ma50 = SMA(closes,50).at(-1);
+    const macd = MACD(closes);
 
-      let signal="HOLD",cls="hold";
-      if(rsi<35 && last>ma50){ signal="BUY"; cls="buy"; }
-      else if(rsi>65 && last<ma50){ signal="SELL"; cls="sell"; }
+    let signal="HOLD", cls="hold", conf=40;
+    if(rsi<35 && last>ma50 && macd>0){ signal="BUY"; cls="buy"; conf=80; }
+    else if(rsi>65 && last<ma50 && macd<0){ signal="SELL"; cls="sell"; conf=80; }
 
-      tbody.innerHTML += `
-        <tr>
-          <td>${t}</td>
-          <td class="${cls}">${signal}</td>
-          <td>${last.toFixed(2)}</td>
-          <td>${rsi?.toFixed(1)}</td>
-          <td>${last>ma50?"Up":"Down"}</td>
-        </tr>`;
-    }catch(e){
-      log(`[${t}] ${e.message}`);
-      tbody.innerHTML += `
-        <tr>
-          <td>${t}</td>
-          <td class="hold">WAIT</td>
-          <td>—</td>
-          <td>—</td>
-          <td>Rate limited</td>
-        </tr>`;
-    }
+    let sl="—", tp="—";
+    if(signal==="BUY"){ sl=(last*0.97).toFixed(2); tp=(last*1.06).toFixed(2); }
+    if(signal==="SELL"){ sl=(last*1.03).toFixed(2); tp=(last*0.94).toFixed(2); }
+
+    tb.innerHTML += `
+    <tr>
+      <td>${t}</td>
+      <td class="${cls}">${signal}</td>
+      <td>${last.toFixed(2)}</td>
+      <td>${sl}</td>
+      <td>${tp}</td>
+      <td>${rsi.toFixed(1)}</td>
+      <td>${macd>0?"Bullish":"Bearish"}</td>
+      <td>${conf}%</td>
+    </tr>`;
   }
-  log("Done.");
 }
 </script>
 </body>
