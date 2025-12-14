@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>AI Trading Bot – Multi-Market Stable</title>
+<title>AI Trading Bot – Stable Signals</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="icon" href="data:image/x-icon;," />
 
@@ -23,13 +23,20 @@ th,td{padding:8px;border-bottom:1px solid #1f2937;text-align:left}
 </head>
 
 <body>
-<header><h2>AI Trading Bot – Stocks · Gold · Forex</h2></header>
+<header><h2>AI Trading Bot – Stocks & Forex (ATR + Confidence)</h2></header>
 
 <div class="wrap">
 
 <div class="card">
 <label>Tickers (comma separated)</label>
-<input id="tickers" value="AAPL"><br><br>
+<input id="tickers" value="AAPL,EUR/USD"><br><br>
+
+<label>Range</label>
+<select id="range">
+  <option value="3mo">3 Months</option>
+  <option value="6mo" selected>6 Months</option>
+  <option value="1y">1 Year</option>
+</select><br><br>
 
 <label>Interval</label>
 <select id="interval">
@@ -52,6 +59,7 @@ th,td{padding:8px;border-bottom:1px solid #1f2937;text-align:left}
 <th>ATR</th>
 <th>RSI</th>
 <th>MACD</th>
+<th>Confidence</th>
 <th>Status</th>
 </tr>
 </thead>
@@ -65,20 +73,18 @@ th,td{padding:8px;border-bottom:1px solid #1f2937;text-align:left}
 const PROXY="https://tradingbot-proxy.globoist.workers.dev";
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 
-// -------- SAFE FETCH --------
-async function fetchData(symbol, interval){
-  const r = await fetch(`${PROXY}/chart/${symbol}?interval=${interval}`);
+// ---------- SAFE FETCH ----------
+async function fetchData(symbol, interval, range){
+  const r = await fetch(`${PROXY}/chart/${symbol}?interval=${interval}&range=${range}`);
   const j = await r.json();
-
   if (!j?.chart?.result?.[0]?.indicators?.quote?.[0]) {
-    throw new Error(j?.error || "No market data");
+    throw new Error(j?.error || "No data");
   }
-
   const q = j.chart.result[0].indicators.quote[0];
   return { close:q.close, high:q.high, low:q.low };
 }
 
-// -------- INDICATORS --------
+// ---------- INDICATORS ----------
 function SMA(v,p){return v.map((_,i)=>i<p-1?null:v.slice(i-p+1,i+1).reduce((a,b)=>a+b)/p);}
 function EMA(v,p){const k=2/(p+1);let e=v[0];return v.map(x=>e=e+k*(x-e));}
 
@@ -113,18 +119,18 @@ function ATR(h,l,c,p=14){
   return SMA(tr,p).at(-1);
 }
 
-// -------- MAIN --------
+// ---------- MAIN ----------
 async function run(){
   const tb=document.getElementById("results");
   tb.innerHTML="";
   const tickers=document.getElementById("tickers").value.split(",").map(x=>x.trim());
   const interval=document.getElementById("interval").value;
+  const range=document.getElementById("range").value;
 
   for(const [i,t] of tickers.entries()){
     if(i>0) await sleep(300);
-
     try{
-      const d=await fetchData(t,interval);
+      const d=await fetchData(t,interval,range);
       const c=d.close,h=d.high,l=d.low;
 
       const last=c.at(-1);
@@ -133,9 +139,19 @@ async function run(){
       const atr=ATR(h,l,c);
       const ma=SMA(c,50).at(-1);
 
+      // ----- SIGNAL -----
       let signal="HOLD",cls="hold";
-      if(rsi<35&&last>ma&&macd>0){signal="BUY";cls="buy";}
-      else if(rsi>65&&last<ma&&macd<0){signal="SELL";cls="sell";}
+      let confidence=50;
+
+      if(rsi<35 && last>ma && macd>0){
+        signal="BUY"; cls="buy";
+        confidence=85;
+      } else if(rsi>65 && last<ma && macd<0){
+        signal="SELL"; cls="sell";
+        confidence=85;
+      } else if(macd>0 || macd<0){
+        confidence=60;
+      }
 
       const sl = signal==="SELL" ? (last+1.5*atr) : (last-1.5*atr);
       const tp = signal==="SELL" ? (last-3*atr) : (last+3*atr);
@@ -150,14 +166,15 @@ async function run(){
         <td>${atr.toFixed(2)}</td>
         <td>${rsi.toFixed(1)}</td>
         <td>${macd>0?"Bullish":"Bearish"}</td>
+        <td>${confidence}%</td>
         <td>OK</td>
       </tr>`;
-
     }catch(e){
       tb.innerHTML+=`
       <tr>
         <td>${t}</td>
         <td class="wait">WAIT</td>
+        <td>—</td>
         <td>—</td>
         <td>—</td>
         <td>—</td>
