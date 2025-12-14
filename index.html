@@ -2,14 +2,14 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>AI Trading Bot – Full Signals</title>
+<title>AI Trading Bot – ATR Smart Risk</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="icon" href="data:image/x-icon;," />
 
 <style>
 body{background:#0b1220;color:#e5e7eb;font-family:system-ui;margin:0}
 header{padding:14px;background:#020617;border-bottom:1px solid #1f2937}
-.wrap{max-width:1300px;margin:auto;padding:16px}
+.wrap{max-width:1400px;margin:auto;padding:16px}
 .card{background:#020617;border:1px solid #1f2937;border-radius:10px;padding:14px;margin-bottom:16px}
 input,select,button{width:100%;padding:10px;border-radius:8px;background:#020617;color:#e5e7eb;border:1px solid #1f2937}
 button{background:#2563eb;border:none;font-weight:600;cursor:pointer}
@@ -22,7 +22,7 @@ th,td{padding:8px;border-bottom:1px solid #1f2937;text-align:left}
 </head>
 
 <body>
-<header><h2>AI Trading Bot – Entry · Exit · SL · TP · MACD</h2></header>
+<header><h2>AI Trading Bot – ATR-Based SL / TP</h2></header>
 
 <div class="wrap">
 
@@ -56,6 +56,7 @@ th,td{padding:8px;border-bottom:1px solid #1f2937;text-align:left}
 <th>Exit</th>
 <th>Stop Loss</th>
 <th>Take Profit</th>
+<th>ATR</th>
 <th>RSI</th>
 <th>MACD</th>
 <th>Confidence</th>
@@ -74,12 +75,14 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 async function fetchData(symbol,interval){
   const r=await fetch(`${PROXY}/chart/${symbol}?interval=${interval}`);
   const j=await r.json();
-  return j.chart.result[0].indicators.quote[0].close;
+  const q=j.chart.result[0].indicators.quote[0];
+  return { close:q.close, high:q.high, low:q.low };
 }
 
-// Indicators
+// ===== Indicators =====
 function SMA(v,p){return v.map((_,i)=>i<p-1?null:v.slice(i-p+1,i+1).reduce((a,b)=>a+b)/p);}
 function EMA(v,p){const k=2/(p+1);let e=v[0];return v.map(x=>e=e+k*(x-e));}
+
 function RSI(v,p=14){
   let g=0,l=0,o=[];
   for(let i=1;i<v.length;i++){
@@ -92,13 +95,27 @@ function RSI(v,p=14){
   }
   o.unshift(null); return o;
 }
+
 function MACD(v){
   const m=EMA(v,12).map((x,i)=>x-EMA(v,26)[i]);
   const s=EMA(m,9);
   return m[m.length-1]-s[s.length-1];
 }
 
-// Main
+// ATR
+function ATR(high,low,close,p=14){
+  let tr=[];
+  for(let i=1;i<close.length;i++){
+    tr.push(Math.max(
+      high[i]-low[i],
+      Math.abs(high[i]-close[i-1]),
+      Math.abs(low[i]-close[i-1])
+    ));
+  }
+  return SMA(tr,p).at(-1);
+}
+
+// ===== MAIN =====
 async function run(){
   const tb=document.getElementById("results");
   tb.innerHTML="";
@@ -107,20 +124,24 @@ async function run(){
 
   for(const [i,t] of tickers.entries()){
     if(i>0) await sleep(300);
-    const c=await fetchData(t,interval);
+    const d=await fetchData(t,interval);
+    const c=d.close,h=d.high,l=d.low;
+
     const last=c.at(-1);
     const rsi=RSI(c).at(-1);
     const ma=SMA(c,50).at(-1);
     const macd=MACD(c);
+    const atr=ATR(h,l,c);
 
-    let signal="HOLD",cls="hold",conf=50;
-    if(rsi<35&&last>ma&&macd>0){signal="BUY";cls="buy";conf=85;}
-    else if(rsi>65&&last<ma&&macd<0){signal="SELL";cls="sell";conf=85;}
+    let signal="HOLD",cls="hold",conf=55;
+    if(rsi<35&&last>ma&&macd>0){signal="BUY";cls="buy";conf=88;}
+    else if(rsi>65&&last<ma&&macd<0){signal="SELL";cls="sell";conf=88;}
 
-    const slBuy=(last*0.97).toFixed(2);
-    const tpBuy=(last*1.06).toFixed(2);
-    const slSell=(last*1.03).toFixed(2);
-    const tpSell=(last*0.94).toFixed(2);
+    // ATR-based SL / TP (1 : 2 RR)
+    const slBuy=(last-(1.5*atr)).toFixed(2);
+    const tpBuy=(last+(3*atr)).toFixed(2);
+    const slSell=(last+(1.5*atr)).toFixed(2);
+    const tpSell=(last-(3*atr)).toFixed(2);
 
     const exit=signal==="SELL"?tpSell:tpBuy;
     const sl=signal==="SELL"?slSell:slBuy;
@@ -134,6 +155,7 @@ async function run(){
       <td>${exit}</td>
       <td>${sl}</td>
       <td>${tp}</td>
+      <td>${atr.toFixed(2)}</td>
       <td>${rsi.toFixed(1)}</td>
       <td>${macd>0?"Bullish":"Bearish"}</td>
       <td>${conf}%</td>
