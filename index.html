@@ -66,7 +66,7 @@ th,td{padding:8px;border-bottom:1px solid #1f2937}
 </div>
 
 <script>
-const PROXY="https://us-stock-proxy.YOURNAME.workers.dev";
+const PROXY="https://tradingbot-proxy.globoist.workers.dev";
 
 function SMA(v,p){return v.map((_,i)=>i<p-1?null:v.slice(i-p+1,i+1).reduce((a,b)=>a+b)/p);}
 function EMA(v,p){const k=2/(p+1);let e=v[0];return v.map(x=>e=e+k*(x-e));}
@@ -166,3 +166,4 @@ async function run(){
 </script>
 </body>
 </html>
+
