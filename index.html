@@ -1,52 +1,46 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
 <meta charset="UTF-8">
-<title>AI Trading Bot – US Stocks & Forex</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>US Stock Dual-Strategy Bot</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="icon" href="data:image/x-icon;," />
 
 <style>
 body{background:#0b1220;color:#e5e7eb;font-family:system-ui;margin:0}
 header{padding:14px;background:#020617;border-bottom:1px solid #1f2937}
-.wrap{max-width:1400px;margin:auto;padding:16px}
+.wrap{max-width:1500px;margin:auto;padding:16px}
 .card{background:#020617;border:1px solid #1f2937;border-radius:10px;padding:14px;margin-bottom:16px}
 input,select,button{width:100%;padding:10px;border-radius:8px;background:#020617;color:#e5e7eb;border:1px solid #1f2937}
 button{background:#2563eb;border:none;font-weight:600;cursor:pointer}
 table{width:100%;border-collapse:collapse}
-th,td{padding:8px;border-bottom:1px solid #1f2937;text-align:left}
+th,td{padding:8px;border-bottom:1px solid #1f2937}
 .buy{color:#22c55e}
 .sell{color:#ef4444}
 .hold{color:#facc15}
-.wait{color:#9ca3af}
+.note{color:#9ca3af;font-size:12px}
 </style>
 </head>
 
 <body>
 <header>
-  <h2>AI Trading Bot – ATR Signals (US Stocks & Forex)</h2>
+<h2>US Stock Dual-Strategy Trading Bot</h2>
 </header>
 
 <div class="wrap">
 
 <div class="card">
 <label>Tickers (comma separated)</label>
-<input id="tickers" value="AAPL,EUR/USD"><br><br>
-
-<label>Range</label>
-<select id="range">
-  <option value="3mo">3 Months</option>
-  <option value="6mo" selected>6 Months</option>
-  <option value="1y">1 Year</option>
-</select><br><br>
+<input id="tickers" value="AAPL,MSFT,NVDA,META,AMZN">
 
 <label>Interval</label>
 <select id="interval">
-  <option value="1d">1 Day</option>
-  <option value="1h">1 Hour</option>
-</select><br><br>
+<option value="1d">1 Day</option>
+<option value="1h">1 Hour</option>
+</select>
 
-<button onclick="run()">Scan Signals</button>
+<br><br>
+<button onclick="run()">Scan</button>
 </div>
 
 <div class="card">
@@ -54,44 +48,26 @@ th,td{padding:8px;border-bottom:1px solid #1f2937;text-align:left}
 <thead>
 <tr>
 <th>Ticker</th>
+<th>Strategy</th>
 <th>Signal</th>
 <th>Entry</th>
 <th>Stop Loss</th>
 <th>Take Profit</th>
-<th>ATR</th>
 <th>RSI</th>
 <th>MACD</th>
 <th>Confidence</th>
-<th>Status</th>
+<th>Note</th>
 </tr>
 </thead>
-<tbody id="results"></tbody>
+<tbody id="out"></tbody>
 </table>
 </div>
 
 </div>
 
 <script>
-const PROXY = "https://tradingbot-proxy.globoist.workers.dev";
-const sleep = ms => new Promise(r => setTimeout(r, ms));
+const PROXY="https://us-stock-proxy.YOURNAME.workers.dev";
 
-// ---------- SAFE FETCH (ENCODE FIX HERE) ----------
-async function fetchData(symbol, interval, range){
-  const encoded = encodeURIComponent(symbol); // 🔑 FIX
-  const r = await fetch(
-    `${PROXY}/chart/${encoded}?interval=${interval}&range=${range}`
-  );
-  const j = await r.json();
-
-  if (!j?.chart?.result?.[0]?.indicators?.quote?.[0]) {
-    throw new Error(j?.error || "No data");
-  }
-
-  const q = j.chart.result[0].indicators.quote[0];
-  return { close:q.close, high:q.high, low:q.low };
-}
-
-// ---------- INDICATORS ----------
 function SMA(v,p){return v.map((_,i)=>i<p-1?null:v.slice(i-p+1,i+1).reduce((a,b)=>a+b)/p);}
 function EMA(v,p){const k=2/(p+1);let e=v[0];return v.map(x=>e=e+k*(x-e));}
 
@@ -99,13 +75,13 @@ function RSI(v,p=14){
   let g=0,l=0,o=[];
   for(let i=1;i<v.length;i++){
     let d=v[i]-v[i-1];
-    g+=Math.max(d,0); l+=Math.max(-d,0);
+    g+=Math.max(d,0);l+=Math.max(-d,0);
     if(i<p){o.push(null);continue;}
     if(i===p){g/=p;l/=p;}
     else{g=(g*(p-1)+Math.max(d,0))/p;l=(l*(p-1)+Math.max(-d,0))/p;}
     o.push(100-100/(1+g/l));
   }
-  o.unshift(null); return o;
+  o.unshift(null);return o;
 }
 
 function MACD(v){
@@ -117,71 +93,74 @@ function MACD(v){
 function ATR(h,l,c,p=14){
   let tr=[];
   for(let i=1;i<c.length;i++){
-    tr.push(Math.max(
-      h[i]-l[i],
-      Math.abs(h[i]-c[i-1]),
-      Math.abs(l[i]-c[i-1])
-    ));
+    tr.push(Math.max(h[i]-l[i],Math.abs(h[i]-c[i-1]),Math.abs(l[i]-c[i-1])));
   }
   return SMA(tr,p).at(-1);
 }
 
-// ---------- MAIN ----------
+async function fetchData(sym,intv){
+  const r=await fetch(`${PROXY}/chart/${encodeURIComponent(sym)}?interval=${intv}`);
+  const j=await r.json();
+  const q=j.chart.result[0].indicators.quote[0];
+  return {c:q.close,h:q.high,l:q.low};
+}
+
 async function run(){
-  const tb=document.getElementById("results");
+  const tb=document.getElementById("out");
   tb.innerHTML="";
-  const tickers=document.getElementById("tickers").value.split(",").map(x=>x.trim());
-  const interval=document.getElementById("interval").value;
-  const range=document.getElementById("range").value;
+  const syms=document.getElementById("tickers").value.split(",").map(x=>x.trim());
+  const intv=document.getElementById("interval").value;
 
-  for(const [i,t] of tickers.entries()){
-    if(i>0) await sleep(300);
-    try{
-      const d=await fetchData(t,interval,range);
-      const c=d.close,h=d.high,l=d.low;
+  for(const s of syms){
+    const d=await fetchData(s,intv);
+    const c=d.c,h=d.h,l=d.l;
+    const price=c.at(-1);
+    const rsi=RSI(c).at(-1);
+    const macd=MACD(c);
+    const ma=SMA(c,50).at(-1);
+    const atr=ATR(h,l,c);
 
-      const last=c.at(-1);
-      const rsi=RSI(c).at(-1);
-      const macd=MACD(c);
-      const atr=ATR(h,l,c);
-      const ma=SMA(c,50).at(-1);
+    // ===== STRATEGY 1: TREND RIDE =====
+    let tSig="HOLD",tCls="hold",tConf=55,tNote="Trend continuation";
+    if(price>ma && rsi>55 && macd>0){tSig="BUY";tCls="buy";tConf=80;}
+    if(price<ma && rsi<45 && macd<0){tSig="SELL";tCls="sell";tConf=80;}
 
-      let signal="HOLD",cls="hold",confidence=50;
-      if(rsi<35&&last>ma&&macd>0){signal="BUY";cls="buy";confidence=85;}
-      else if(rsi>65&&last<ma&&macd<0){signal="SELL";cls="sell";confidence=85;}
-      else if(macd!==0){confidence=60;}
+    // ===== STRATEGY 2: REVERSAL =====
+    let rSig="HOLD",rCls="hold",rConf=55,rNote="Waiting exhaustion";
+    if(rsi<35 && macd>0){rSig="BUY";rCls="buy";rConf=85;}
+    if(rsi>65 && macd<0){rSig="SELL";rCls="sell";rConf=85;}
 
-      const sl = signal==="SELL" ? (last+1.5*atr) : (last-1.5*atr);
-      const tp = signal==="SELL" ? (last-3*atr) : (last+3*atr);
+    const slBuy=(price-1.5*atr).toFixed(2);
+    const tpBuy=(price+3*atr).toFixed(2);
+    const slSell=(price+1.5*atr).toFixed(2);
+    const tpSell=(price-3*atr).toFixed(2);
 
-      tb.innerHTML+=`
-      <tr>
-        <td>${t}</td>
-        <td class="${cls}">${signal}</td>
-        <td>${last.toFixed(4)}</td>
-        <td>${sl.toFixed(4)}</td>
-        <td>${tp.toFixed(4)}</td>
-        <td>${atr.toFixed(4)}</td>
-        <td>${rsi.toFixed(1)}</td>
-        <td>${macd>0?"Bullish":"Bearish"}</td>
-        <td>${confidence}%</td>
-        <td>OK</td>
-      </tr>`;
-    }catch(e){
-      tb.innerHTML+=`
-      <tr>
-        <td>${t}</td>
-        <td class="wait">WAIT</td>
-        <td>—</td>
-        <td>—</td>
-        <td>—</td>
-        <td>—</td>
-        <td>—</td>
-        <td>—</td>
-        <td>—</td>
-        <td>${e.message}</td>
-      </tr>`;
-    }
+    tb.innerHTML+=`
+    <tr>
+      <td>${s}</td>
+      <td>Trend Ride</td>
+      <td class="${tCls}">${tSig}</td>
+      <td>${price.toFixed(2)}</td>
+      <td>${tSig==="SELL"?slSell:slBuy}</td>
+      <td>${tSig==="SELL"?tpSell:tpBuy}</td>
+      <td>${rsi.toFixed(1)}</td>
+      <td>${macd>0?"Bullish":"Bearish"}</td>
+      <td>${tConf}%</td>
+      <td class="note">${tNote}</td>
+    </tr>
+
+    <tr>
+      <td>${s}</td>
+      <td>Reversal</td>
+      <td class="${rCls}">${rSig}</td>
+      <td>${price.toFixed(2)}</td>
+      <td>${rSig==="SELL"?slSell:slBuy}</td>
+      <td>${rSig==="SELL"?tpSell:tpBuy}</td>
+      <td>${rsi.toFixed(1)}</td>
+      <td>${macd>0?"Bullish":"Bearish"}</td>
+      <td>${rConf}%</td>
+      <td class="note">${rNote}</td>
+    </tr>`;
   }
 }
 </script>
