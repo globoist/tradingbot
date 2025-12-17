@@ -33,6 +33,13 @@ th,td{padding:8px;border-bottom:1px solid #1f2937}
 <label>Tickers (comma separated)</label>
 <input id="tickers" value="AAPL,MSFT,NVDA,META,AMZN">
 
+<label>Range</label>
+<select id="range">
+  <option value="3mo">3 Months</option>
+  <option value="6mo" selected>6 Months</option>
+  <option value="1y">1 Year</option>
+</select>
+
 <label>Interval</label>
 <select id="interval">
 <option value="1d">1 Day</option>
@@ -68,6 +75,14 @@ th,td{padding:8px;border-bottom:1px solid #1f2937}
 <script>
 const PROXY="https://tradingbot-proxy.globoist.workers.dev";
 
+// ---------- UTIL ----------
+function rangeToSize(r){
+  if(r==="3mo") return 90;
+  if(r==="6mo") return 180;
+  if(r==="1y") return 260;
+  return 180;
+}
+
 function SMA(v,p){return v.map((_,i)=>i<p-1?null:v.slice(i-p+1,i+1).reduce((a,b)=>a+b)/p);}
 function EMA(v,p){const k=2/(p+1);let e=v[0];return v.map(x=>e=e+k*(x-e));}
 
@@ -98,21 +113,27 @@ function ATR(h,l,c,p=14){
   return SMA(tr,p).at(-1);
 }
 
-async function fetchData(sym,intv){
-  const r=await fetch(`${PROXY}/chart/${encodeURIComponent(sym)}?interval=${intv}`);
+// ---------- FETCH ----------
+async function fetchData(sym,intv,range){
+  const size=rangeToSize(range);
+  const r=await fetch(
+    `${PROXY}/chart/${encodeURIComponent(sym)}?interval=${intv}&size=${size}`
+  );
   const j=await r.json();
   const q=j.chart.result[0].indicators.quote[0];
   return {c:q.close,h:q.high,l:q.low};
 }
 
+// ---------- MAIN ----------
 async function run(){
   const tb=document.getElementById("out");
   tb.innerHTML="";
   const syms=document.getElementById("tickers").value.split(",").map(x=>x.trim());
   const intv=document.getElementById("interval").value;
+  const range=document.getElementById("range").value;
 
   for(const s of syms){
-    const d=await fetchData(s,intv);
+    const d=await fetchData(s,intv,range);
     const c=d.c,h=d.h,l=d.l;
     const price=c.at(-1);
     const rsi=RSI(c).at(-1);
@@ -120,13 +141,13 @@ async function run(){
     const ma=SMA(c,50).at(-1);
     const atr=ATR(h,l,c);
 
-    // ===== STRATEGY 1: TREND RIDE =====
-    let tSig="HOLD",tCls="hold",tConf=55,tNote="Trend continuation";
+    // Trend Ride
+    let tSig="HOLD",tCls="hold",tConf=55;
     if(price>ma && rsi>55 && macd>0){tSig="BUY";tCls="buy";tConf=80;}
     if(price<ma && rsi<45 && macd<0){tSig="SELL";tCls="sell";tConf=80;}
 
-    // ===== STRATEGY 2: REVERSAL =====
-    let rSig="HOLD",rCls="hold",rConf=55,rNote="Waiting exhaustion";
+    // Reversal
+    let rSig="HOLD",rCls="hold",rConf=55;
     if(rsi<35 && macd>0){rSig="BUY";rCls="buy";rConf=85;}
     if(rsi>65 && macd<0){rSig="SELL";rCls="sell";rConf=85;}
 
@@ -137,8 +158,7 @@ async function run(){
 
     tb.innerHTML+=`
     <tr>
-      <td>${s}</td>
-      <td>Trend Ride</td>
+      <td>${s}</td><td>Trend Ride</td>
       <td class="${tCls}">${tSig}</td>
       <td>${price.toFixed(2)}</td>
       <td>${tSig==="SELL"?slSell:slBuy}</td>
@@ -146,12 +166,11 @@ async function run(){
       <td>${rsi.toFixed(1)}</td>
       <td>${macd>0?"Bullish":"Bearish"}</td>
       <td>${tConf}%</td>
-      <td class="note">${tNote}</td>
+      <td class="note">Trend continuation</td>
     </tr>
 
     <tr>
-      <td>${s}</td>
-      <td>Reversal</td>
+      <td>${s}</td><td>Reversal</td>
       <td class="${rCls}">${rSig}</td>
       <td>${price.toFixed(2)}</td>
       <td>${rSig==="SELL"?slSell:slBuy}</td>
@@ -159,11 +178,10 @@ async function run(){
       <td>${rsi.toFixed(1)}</td>
       <td>${macd>0?"Bullish":"Bearish"}</td>
       <td>${rConf}%</td>
-      <td class="note">${rNote}</td>
+      <td class="note">Exhaustion setup</td>
     </tr>`;
   }
 }
 </script>
 </body>
 </html>
-
