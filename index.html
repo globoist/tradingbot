@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>US Stock Dual-Strategy Trading Bot</title>
+<title>US Stock Trading Bot</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="icon" href="data:image/x-icon;," />
 
@@ -11,7 +11,8 @@ body{background:#0b1220;color:#e5e7eb;font-family:system-ui;margin:0}
 header{padding:14px;background:#020617;border-bottom:1px solid #1f2937}
 .wrap{max-width:1600px;margin:auto;padding:16px}
 .card{background:#020617;border:1px solid #1f2937;border-radius:10px;padding:14px;margin-bottom:16px}
-input,select,button{width:100%;padding:10px;border-radius:8px;background:#020617;color:#e5e7eb;border:1px solid #1f2937}
+input,textarea,select,button{width:100%;padding:10px;border-radius:8px;background:#020617;color:#e5e7eb;border:1px solid #1f2937}
+textarea{min-height:70px}
 button{background:#2563eb;border:none;font-weight:600;cursor:pointer}
 table{width:100%;border-collapse:collapse}
 th,td{padding:8px;border-bottom:1px solid #1f2937;text-align:center}
@@ -19,33 +20,31 @@ th,td{padding:8px;border-bottom:1px solid #1f2937;text-align:center}
 .sell{color:#ef4444}
 .hold{color:#facc15}
 .note{color:#9ca3af;font-size:12px;text-align:left}
+
 .weekly-symbol{
   display:inline-block;
-  margin:4px 6px;
+  margin:4px;
   padding:6px 10px;
   border:1px solid #1f2937;
   border-radius:6px;
   cursor:pointer;
-  background:#020617;
 }
-.weekly-symbol:hover{
-  background:#2563eb;
-}
+.weekly-symbol:hover{background:#2563eb}
 .hidden{display:none}
 </style>
 </head>
 
 <body>
 <header>
-<h2>US Stock Dual-Strategy Bot</h2>
+<h2>US Stock Dual-Strategy Trading Bot</h2>
 </header>
 
 <div class="wrap">
 
-<!-- INPUT PANEL -->
+<!-- SCAN INPUT -->
 <div class="card">
-<label>Tickers (comma separated)</label>
-<input id="tickers" value="AAPL,MSFT,NVDA">
+<label>Tickers to Scan (comma separated)</label>
+<input id="tickers" placeholder="AAPL, NVDA, MSFT">
 
 <label>Range</label>
 <select id="range">
@@ -86,60 +85,102 @@ th,td{padding:8px;border-bottom:1px solid #1f2937;text-align:center}
 </table>
 </div>
 
-<!-- WEEKLY ACTIVE LIST -->
+<!-- WEEKLY WATCH LIST -->
 <div class="card">
-<button onclick="toggleWeekly()">Show Weekly Active List</button>
+<h3>Weekly Watch List</h3>
+
+<button onclick="toggleWeekly()">Show / Hide Weekly List</button>
 
 <div id="weeklyPanel" class="hidden">
-  <p class="note">
-    Weekly Active Stocks (click to analyze)
-  </p>
-  <div id="weeklyList"></div>
+
+<p class="note">Click stock to add it to scan list (no auto scan)</p>
+
+<div id="weeklyList"></div>
+
+<hr>
+
+<label>Manually Add Batch (comma separated)</label>
+<textarea id="manualBatch" placeholder="AAPL, MSFT, NVDA, META"></textarea>
+
+<button onclick="addManualBatch()">Add to Weekly Watch List</button>
+
 </div>
 </div>
 
 </div>
 
 <script>
-const PROXY="https://tradingbot-proxy.globoist.workers.dev";
-const WEEKLY_URL="https://scanbot.globoist.workers.dev/weekly-list";
+const PROXY = "https://tradingbot-proxy.globoist.workers.dev";
+const WEEKLY_URL = "https://scanbot.globoist.workers.dev/weekly-list";
 
-// ---- WEEKLY UI ----
-async function toggleWeekly(){
-  const panel=document.getElementById("weeklyPanel");
-  panel.classList.toggle("hidden");
-  if(!panel.classList.contains("hidden")){
+let weeklySymbols = [];
+
+// ---------------- WEEKLY UI ----------------
+function toggleWeekly(){
+  const p = document.getElementById("weeklyPanel");
+  p.classList.toggle("hidden");
+  if(!p.classList.contains("hidden")){
     loadWeekly();
   }
 }
 
 async function loadWeekly(){
-  const box=document.getElementById("weeklyList");
-  box.innerHTML="Loading...";
   try{
-    const r=await fetch(WEEKLY_URL);
-    const j=await r.json();
-    box.innerHTML="";
-    j.symbols.forEach(sym=>{
-      const s=document.createElement("span");
-      s.className="weekly-symbol";
-      s.textContent=sym;
-      s.onclick=()=>{
-        document.getElementById("tickers").value=sym;
-        run();
-        window.scrollTo({top:0,behavior:"smooth"});
-      };
-      box.appendChild(s);
-    });
+    const r = await fetch(WEEKLY_URL);
+    const j = await r.json();
+    weeklySymbols = j.symbols || [];
+    renderWeekly();
   }catch{
-    box.innerHTML="<span class='note'>Weekly list not available yet</span>";
+    weeklySymbols = [];
+    renderWeekly();
   }
 }
 
-/* ===== EXISTING BOT LOGIC (UNCHANGED) ===== */
-/* (Your existing run(), indicators, fetch logic remain here) */
-/* Do NOT remove your current strategy code */
+function renderWeekly(){
+  const box = document.getElementById("weeklyList");
+  box.innerHTML = "";
 
+  weeklySymbols.forEach(sym=>{
+    const s = document.createElement("span");
+    s.className = "weekly-symbol";
+    s.textContent = sym;
+    s.onclick = ()=>addToScan(sym);
+    box.appendChild(s);
+  });
+
+  if(weeklySymbols.length===0){
+    box.innerHTML = "<span class='note'>No weekly list loaded yet</span>";
+  }
+}
+
+function addManualBatch(){
+  const txt = document.getElementById("manualBatch").value;
+  txt.split(",").map(s=>s.trim().toUpperCase()).forEach(sym=>{
+    if(sym && !weeklySymbols.includes(sym)){
+      weeklySymbols.push(sym);
+    }
+  });
+  document.getElementById("manualBatch").value="";
+  renderWeekly();
+}
+
+function addToScan(sym){
+  const input = document.getElementById("tickers");
+  const current = input.value
+    .split(",")
+    .map(s=>s.trim())
+    .filter(Boolean);
+
+  if(!current.includes(sym)){
+    current.push(sym);
+  }
+  input.value = current.join(", ");
+}
+
+// ---------------- BOT LOGIC ----------------
+// Your existing run(), fetch, indicators remain unchanged
+// (no auto-scan triggered from weekly list)
 </script>
+
 </body>
 </html>
