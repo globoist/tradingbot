@@ -11,7 +11,10 @@ body{background:#0b1220;color:#e5e7eb;font-family:system-ui;margin:0}
 header{padding:14px;background:#020617;border-bottom:1px solid #1f2937}
 .wrap{max-width:1600px;margin:auto;padding:16px}
 .card{background:#020617;border:1px solid #1f2937;border-radius:10px;padding:14px;margin-bottom:16px}
-input,textarea,select,button{width:100%;padding:10px;border-radius:8px;background:#020617;color:#e5e7eb;border:1px solid #1f2937}
+input,textarea,select,button{
+  width:100%;padding:10px;border-radius:8px;
+  background:#020617;color:#e5e7eb;border:1px solid #1f2937
+}
 textarea{min-height:70px}
 button{background:#2563eb;border:none;font-weight:600;cursor:pointer}
 table{width:100%;border-collapse:collapse}
@@ -93,7 +96,7 @@ th,td{padding:8px;border-bottom:1px solid #1f2937;text-align:center}
 
 <div id="weeklyPanel" class="hidden">
 
-<p class="note">Click stock to add it to scan list (no auto scan)</p>
+<p class="note">Click stock to add it to scan list (comma separated, no auto scan)</p>
 
 <div id="weeklyList"></div>
 
@@ -140,6 +143,11 @@ function renderWeekly(){
   const box = document.getElementById("weeklyList");
   box.innerHTML = "";
 
+  if(weeklySymbols.length === 0){
+    box.innerHTML = "<span class='note'>No weekly list loaded yet</span>";
+    return;
+  }
+
   weeklySymbols.forEach(sym=>{
     const s = document.createElement("span");
     s.className = "weekly-symbol";
@@ -147,39 +155,45 @@ function renderWeekly(){
     s.onclick = ()=>addToScan(sym);
     box.appendChild(s);
   });
-
-  if(weeklySymbols.length===0){
-    box.innerHTML = "<span class='note'>No weekly list loaded yet</span>";
-  }
 }
 
+// ----------- FIXED APPEND LOGIC (IMPORTANT) -----------
+function addToScan(sym){
+  const input = document.getElementById("tickers");
+
+  let list = input.value
+    .toUpperCase()
+    .split(",")
+    .map(s => s.trim())
+    .filter(s => s.length > 0);
+
+  if (!list.includes(sym)) {
+    list.push(sym);
+  }
+
+  input.value = list.join(", ");
+}
+
+// ----------- MANUAL WEEKLY LIST ADD -----------
 function addManualBatch(){
   const txt = document.getElementById("manualBatch").value;
-  txt.split(",").map(s=>s.trim().toUpperCase()).forEach(sym=>{
-    if(sym && !weeklySymbols.includes(sym)){
-      weeklySymbols.push(sym);
-    }
-  });
+
+  txt.split(",")
+    .map(s=>s.trim().toUpperCase())
+    .filter(Boolean)
+    .forEach(sym=>{
+      if(!weeklySymbols.includes(sym)){
+        weeklySymbols.push(sym);
+      }
+    });
+
   document.getElementById("manualBatch").value="";
   renderWeekly();
 }
 
-function addToScan(sym){
-  const input = document.getElementById("tickers");
-  const current = input.value
-    .split(",")
-    .map(s=>s.trim())
-    .filter(Boolean);
-
-  if(!current.includes(sym)){
-    current.push(sym);
-  }
-  input.value = current.join(", ");
-}
-
 // ---------------- BOT LOGIC ----------------
 // Your existing run(), fetch, indicators remain unchanged
-// (no auto-scan triggered from weekly list)
+// Scan only happens when you press the Scan button
 </script>
 
 </body>
