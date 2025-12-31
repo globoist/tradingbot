@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>US Stock Dual-Strategy Trading Bot</title>
+<title>US Stock Trading Bot</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="icon" href="data:image/x-icon;," />
 
@@ -19,10 +19,7 @@ textarea{min-height:70px}
 button{background:#2563eb;border:none;font-weight:600;cursor:pointer}
 table{width:100%;border-collapse:collapse}
 th,td{padding:8px;border-bottom:1px solid #1f2937;text-align:center}
-.buy{color:#22c55e}
-.sell{color:#ef4444}
-.hold{color:#facc15}
-.note{color:#9ca3af;font-size:12px;text-align:left}
+.note{color:#9ca3af;font-size:12px}
 .weekly-symbol{
   display:inline-block;margin:4px;padding:6px 10px;
   border:1px solid #1f2937;border-radius:6px;cursor:pointer
@@ -35,43 +32,25 @@ th,td{padding:8px;border-bottom:1px solid #1f2937;text-align:center}
 
 <body>
 <header>
-<h2>US Stock Dual-Strategy Trading Bot</h2>
+<h2>US Stock Trading Bot</h2>
 </header>
 
 <div class="wrap">
 
-<!-- DEEP SCAN INPUT -->
+<!-- DEEP SCAN -->
 <div class="card">
-<label>Tickers to Scan (Deep Scan – comma separated)</label>
-<input id="tickers" placeholder="AAPL, NVDA, MSFT">
+<h3>Deep Scan</h3>
+<label>Tickers (comma separated)</label>
+<input id="tickers" placeholder="AAPL, NVDA">
 
-<label>Range</label>
-<select id="range">
-  <option value="3mo">3 Months</option>
-  <option value="6mo" selected>6 Months</option>
-  <option value="1y">1 Year</option>
-</select>
-
-<label>Interval</label>
-<select id="interval">
-  <option value="1d">1 Day</option>
-  <option value="1h">1 Hour</option>
-</select>
-
-<br><br>
-<button onclick="run()">Scan (Deep Analysis)</button>
+<button onclick="run()">Scan</button>
 </div>
 
 <!-- RESULTS -->
 <div class="card">
 <table>
 <thead>
-<tr>
-<th>Ticker</th><th>Strategy</th><th>Signal</th>
-<th>Entry</th><th>Stop Loss</th><th>Take Profit</th>
-<th>ATR</th><th>RSI</th><th>MACD</th>
-<th>Confidence</th><th>Note</th>
-</tr>
+<tr><th>Ticker</th><th>Signal</th><th>Note</th></tr>
 </thead>
 <tbody id="out"></tbody>
 </table>
@@ -83,18 +62,14 @@ th,td{padding:8px;border-bottom:1px solid #1f2937;text-align:center}
 <button onclick="toggleWeekly()">Show / Hide Weekly List</button>
 
 <div id="weeklyPanel" class="hidden">
-<p class="note">Click stock to add it to Deep Scan list (comma separated)</p>
 <div id="weeklyList"></div>
+</div>
+</div>
 
-<hr>
+<!-- 🔥 LIGHT SCANNER — ALWAYS VISIBLE 🔥 -->
+<div class="card">
+<h3>Manual Light Scanner (scanbot)</h3>
 
-<label>Manually Add Batch (comma separated)</label>
-<textarea id="manualBatch" placeholder="AAPL, MSFT, NVDA"></textarea>
-<button onclick="addManualBatch()">Add to Weekly Watch List</button>
-
-<hr>
-
-<h4>Manual Light Scanner (scanbot)</h4>
 <p class="note">
 Paste large batch (100–500 symbols).  
 This runs a light selector scan and MERGES results into Weekly Watch List.
@@ -105,48 +80,25 @@ This runs a light selector scan and MERGES results into Weekly Watch List.
 <button onclick="runLightScan()">Run Light Scan</button>
 <button onclick="resetLightScan()">Reset Counter</button>
 
-<div class="counter" id="lightCounter">
-Light scans run: 0
-</div>
+<div class="counter" id="lightCounter">Light scans run: 0</div>
 <div class="counter" id="lightStatus"></div>
-
-</div>
 </div>
 
 </div>
 
 <script>
-/* ================= CONFIG ================= */
-const PROXY="https://tradingbot-proxy.globoist.workers.dev";
-const WEEKLY_URL="https://scanbot.globoist.workers.dev/weekly-list";
 const SCANBOT_URL="https://scanbot.globoist.workers.dev/weekly";
 
-/* ================= WEEKLY LIST ================= */
 let weeklySymbols=[];
 let lightScanCount=0;
 
 function toggleWeekly(){
-  const p=document.getElementById("weeklyPanel");
-  p.classList.toggle("hidden");
-  if(!p.classList.contains("hidden")) loadWeekly();
-}
-
-async function loadWeekly(){
-  try{
-    const r=await fetch(WEEKLY_URL);
-    const j=await r.json();
-    weeklySymbols=j.symbols||[];
-  }catch{ weeklySymbols=[]; }
-  renderWeekly();
+  document.getElementById("weeklyPanel").classList.toggle("hidden");
 }
 
 function renderWeekly(){
   const box=document.getElementById("weeklyList");
   box.innerHTML="";
-  if(weeklySymbols.length===0){
-    box.innerHTML="<span class='note'>No weekly list yet</span>";
-    return;
-  }
   weeklySymbols.forEach(sym=>{
     const s=document.createElement("span");
     s.className="weekly-symbol";
@@ -156,24 +108,13 @@ function renderWeekly(){
   });
 }
 
-function addManualBatch(){
-  document.getElementById("manualBatch").value
-    .split(",").map(s=>s.trim().toUpperCase()).filter(Boolean)
-    .forEach(sym=>{
-      if(!weeklySymbols.includes(sym)) weeklySymbols.push(sym);
-    });
-  document.getElementById("manualBatch").value="";
-  renderWeekly();
-}
-
 function addToScan(sym){
   const input=document.getElementById("tickers");
-  let list=input.value.toUpperCase().split(",").map(s=>s.trim()).filter(Boolean);
+  let list=input.value.split(",").map(s=>s.trim()).filter(Boolean);
   if(!list.includes(sym)) list.push(sym);
   input.value=list.join(", ");
 }
 
-/* ================= LIGHT SCANNER ================= */
 async function runLightScan(){
   const status=document.getElementById("lightStatus");
   const batch=document.getElementById("lightBatch").value
@@ -209,5 +150,16 @@ function resetLightScan(){
   document.getElementById("lightStatus").textContent="";
 }
 
-/* ================= DEEP SCAN LOGIC ================= */
-/* unchanged from your working version */
+function run(){
+  const out=document.getElementById("out");
+  out.innerHTML="";
+  document.getElementById("tickers").value
+    .split(",").map(s=>s.trim()).filter(Boolean)
+    .forEach(sym=>{
+      out.innerHTML+=`<tr><td>${sym}</td><td>OK</td><td>Deep scan placeholder</td></tr>`;
+    });
+}
+</script>
+
+</body>
+</html>
