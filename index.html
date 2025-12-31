@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>US Stock Trading Bot</title>
+<title>US Stock Dual-Strategy Trading Bot</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="icon" href="data:image/x-icon;," />
 
@@ -23,14 +23,9 @@ th,td{padding:8px;border-bottom:1px solid #1f2937;text-align:center}
 .sell{color:#ef4444}
 .hold{color:#facc15}
 .note{color:#9ca3af;font-size:12px;text-align:left}
-
 .weekly-symbol{
-  display:inline-block;
-  margin:4px;
-  padding:6px 10px;
-  border:1px solid #1f2937;
-  border-radius:6px;
-  cursor:pointer;
+  display:inline-block;margin:4px;padding:6px 10px;
+  border:1px solid #1f2937;border-radius:6px;cursor:pointer
 }
 .weekly-symbol:hover{background:#2563eb}
 .hidden{display:none}
@@ -44,7 +39,7 @@ th,td{padding:8px;border-bottom:1px solid #1f2937;text-align:center}
 
 <div class="wrap">
 
-<!-- SCAN INPUT -->
+<!-- INPUT -->
 <div class="card">
 <label>Tickers to Scan (comma separated)</label>
 <input id="tickers" placeholder="AAPL, NVDA, MSFT">
@@ -66,7 +61,7 @@ th,td{padding:8px;border-bottom:1px solid #1f2937;text-align:center}
 <button onclick="run()">Scan</button>
 </div>
 
-<!-- RESULT TABLE -->
+<!-- RESULTS -->
 <div class="card">
 <table>
 <thead>
@@ -91,110 +86,178 @@ th,td{padding:8px;border-bottom:1px solid #1f2937;text-align:center}
 <!-- WEEKLY WATCH LIST -->
 <div class="card">
 <h3>Weekly Watch List</h3>
-
 <button onclick="toggleWeekly()">Show / Hide Weekly List</button>
 
 <div id="weeklyPanel" class="hidden">
-
-<p class="note">Click stock to add it to scan list (comma separated, no auto scan)</p>
-
+<p class="note">Click stock to add it to scan list (comma separated)</p>
 <div id="weeklyList"></div>
 
 <hr>
-
 <label>Manually Add Batch (comma separated)</label>
 <textarea id="manualBatch" placeholder="AAPL, MSFT, NVDA, META"></textarea>
-
 <button onclick="addManualBatch()">Add to Weekly Watch List</button>
-
 </div>
 </div>
 
 </div>
 
 <script>
+/* ================= CONFIG ================= */
 const PROXY = "https://tradingbot-proxy.globoist.workers.dev";
 const WEEKLY_URL = "https://scanbot.globoist.workers.dev/weekly-list";
 
-let weeklySymbols = [];
+/* ================= WEEKLY UI ================= */
+let weeklySymbols=[];
 
-// ---------------- WEEKLY UI ----------------
 function toggleWeekly(){
-  const p = document.getElementById("weeklyPanel");
+  const p=document.getElementById("weeklyPanel");
   p.classList.toggle("hidden");
-  if(!p.classList.contains("hidden")){
-    loadWeekly();
-  }
+  if(!p.classList.contains("hidden")) loadWeekly();
 }
 
 async function loadWeekly(){
   try{
-    const r = await fetch(WEEKLY_URL);
-    const j = await r.json();
-    weeklySymbols = j.symbols || [];
-    renderWeekly();
-  }catch{
-    weeklySymbols = [];
-    renderWeekly();
-  }
+    const r=await fetch(WEEKLY_URL);
+    const j=await r.json();
+    weeklySymbols=j.symbols||[];
+  }catch{ weeklySymbols=[]; }
+  renderWeekly();
 }
 
 function renderWeekly(){
-  const box = document.getElementById("weeklyList");
-  box.innerHTML = "";
-
-  if(weeklySymbols.length === 0){
-    box.innerHTML = "<span class='note'>No weekly list loaded yet</span>";
+  const box=document.getElementById("weeklyList");
+  box.innerHTML="";
+  if(weeklySymbols.length===0){
+    box.innerHTML="<span class='note'>No weekly list loaded yet</span>";
     return;
   }
-
   weeklySymbols.forEach(sym=>{
-    const s = document.createElement("span");
-    s.className = "weekly-symbol";
-    s.textContent = sym;
-    s.onclick = ()=>addToScan(sym);
+    const s=document.createElement("span");
+    s.className="weekly-symbol";
+    s.textContent=sym;
+    s.onclick=()=>addToScan(sym);
     box.appendChild(s);
   });
 }
 
-// ----------- FIXED APPEND LOGIC (IMPORTANT) -----------
-function addToScan(sym){
-  const input = document.getElementById("tickers");
-
-  let list = input.value
-    .toUpperCase()
-    .split(",")
-    .map(s => s.trim())
-    .filter(s => s.length > 0);
-
-  if (!list.includes(sym)) {
-    list.push(sym);
-  }
-
-  input.value = list.join(", ");
-}
-
-// ----------- MANUAL WEEKLY LIST ADD -----------
 function addManualBatch(){
-  const txt = document.getElementById("manualBatch").value;
-
-  txt.split(",")
-    .map(s=>s.trim().toUpperCase())
-    .filter(Boolean)
+  const txt=document.getElementById("manualBatch").value;
+  txt.split(",").map(s=>s.trim().toUpperCase()).filter(Boolean)
     .forEach(sym=>{
-      if(!weeklySymbols.includes(sym)){
-        weeklySymbols.push(sym);
-      }
+      if(!weeklySymbols.includes(sym)) weeklySymbols.push(sym);
     });
-
   document.getElementById("manualBatch").value="";
   renderWeekly();
 }
 
-// ---------------- BOT LOGIC ----------------
-// Your existing run(), fetch, indicators remain unchanged
-// Scan only happens when you press the Scan button
-</script>
+function addToScan(sym){
+  const input=document.getElementById("tickers");
+  let list=input.value.toUpperCase().split(",").map(s=>s.trim()).filter(Boolean);
+  if(!list.includes(sym)) list.push(sym);
+  input.value=list.join(", ");
+}
 
+/* ================= INDICATORS ================= */
+function SMA(v,p){return v.map((_,i)=>i<p-1?null:v.slice(i-p+1,i+1).reduce((a,b)=>a+b)/p);}
+function EMA(v,p){const k=2/(p+1);let e=v[0];return v.map(x=>e=e+k*(x-e));}
+function RSI(v,p=14){
+  let g=0,l=0,o=[];
+  for(let i=1;i<v.length;i++){
+    let d=v[i]-v[i-1];
+    g+=Math.max(d,0);l+=Math.max(-d,0);
+    if(i<p){o.push(null);continue;}
+    if(i===p){g/=p;l/=p;}
+    else{g=(g*(p-1)+Math.max(d,0))/p;l=(l*(p-1)+Math.max(-d,0))/p;}
+    o.push(100-100/(1+g/l));
+  }
+  o.unshift(null);return o;
+}
+function MACD(v){
+  const m=EMA(v,12).map((x,i)=>x-EMA(v,26)[i]);
+  const s=EMA(m,9);
+  return m[m.length-1]-s[s.length-1];
+}
+function ATR(h,l,c,p=14){
+  let tr=[];
+  for(let i=1;i<c.length;i++){
+    tr.push(Math.max(h[i]-l[i],Math.abs(h[i]-c[i-1]),Math.abs(l[i]-c[i-1])));
+  }
+  return SMA(tr,p).at(-1);
+}
+
+/* ================= DATA ================= */
+async function fetchData(sym,intv,range){
+  const size=range==="3mo"?90:range==="6mo"?180:260;
+  const r=await fetch(`${PROXY}/chart/${sym}?interval=${intv}&size=${size}`);
+  const j=await r.json();
+  const q=j.chart.result[0].indicators.quote[0];
+  return {c:q.close,h:q.high,l:q.low};
+}
+
+/* ================= MAIN SCAN ================= */
+async function run(){
+  const out=document.getElementById("out");
+  out.innerHTML="";
+  const syms=document.getElementById("tickers").value
+    .split(",").map(s=>s.trim()).filter(Boolean);
+  const intv=document.getElementById("interval").value;
+  const range=document.getElementById("range").value;
+
+  for(const s of syms){
+    try{
+      const d=await fetchData(s,intv,range);
+      const c=d.c,h=d.h,l=d.l;
+      const price=c.at(-1);
+      const rsi=RSI(c).at(-1);
+      const macd=MACD(c);
+      const ma=SMA(c,50).at(-1);
+      const atr=ATR(h,l,c);
+
+      // Trend Ride
+      let tSig="HOLD",tCls="hold",tConf=55;
+      if(price>ma && rsi>55 && macd>0){tSig="BUY";tCls="buy";tConf=80;}
+      if(price<ma && rsi<45 && macd<0){tSig="SELL";tCls="sell";tConf=80;}
+
+      // Reversal
+      let rSig="HOLD",rCls="hold",rConf=55;
+      if(rsi<35 && macd>0){rSig="BUY";rCls="buy";rConf=85;}
+      if(rsi>65 && macd<0){rSig="SELL";rCls="sell";rConf=85;}
+
+      const slBuy=(price-1.5*atr).toFixed(2);
+      const tpBuy=(price+3*atr).toFixed(2);
+      const slSell=(price+1.5*atr).toFixed(2);
+      const tpSell=(price-3*atr).toFixed(2);
+
+      out.innerHTML+=`
+      <tr>
+        <td>${s}</td><td>Trend Ride</td>
+        <td class="${tCls}">${tSig}</td>
+        <td>${price.toFixed(2)}</td>
+        <td>${tSig==="SELL"?slSell:slBuy}</td>
+        <td>${tSig==="SELL"?tpSell:tpBuy}</td>
+        <td>${atr.toFixed(2)}</td>
+        <td>${rsi.toFixed(1)}</td>
+        <td>${macd>0?"Bullish":"Bearish"}</td>
+        <td>${tConf}%</td>
+        <td class="note">Trend continuation</td>
+      </tr>
+      <tr>
+        <td>${s}</td><td>Reversal</td>
+        <td class="${rCls}">${rSig}</td>
+        <td>${price.toFixed(2)}</td>
+        <td>${rSig==="SELL"?slSell:slBuy}</td>
+        <td>${rSig==="SELL"?tpSell:tpBuy}</td>
+        <td>${atr.toFixed(2)}</td>
+        <td>${rsi.toFixed(1)}</td>
+        <td>${macd>0?"Bullish":"Bearish"}</td>
+        <td>${rConf}%</td>
+        <td class="note">Mean reversion</td>
+      </tr>`;
+    }catch(e){
+      out.innerHTML+=`<tr><td colspan="11">${s} — error</td></tr>`;
+    }
+  }
+}
+</script>
 </body>
 </html>
